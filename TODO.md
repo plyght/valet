@@ -23,7 +23,9 @@ Working list
 - [x] Streaming encoder for NDJSON
 - [x] Request body size limiter (layer) per config
 - [x] Rate limiting: global + per-token
-- [ ] Structured audit logging: request_id, sizes, outcome, timing, redactions
-- [ ] Unit tests: paths, auth/origin, exec timeouts/caps
-- [ ] Integration tests: end-to-end
+- [x] Structured audit logging: request_id, sizes, outcome, timing (basic); [ ] redactions and richer per-tool details
+- [x] Unit tests: paths, auth/origin, exec timeouts/caps
+- [x] Integration tests: capabilities (basic)
+- [ ] Integration tests: end-to-end fs_read/fs_write/exec
+- [ ] Golden tests for capabilities and call I/O
 - [ ] proptest for path normalization (behind feature if needed)

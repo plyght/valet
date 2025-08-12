@@ -1,6 +1,10 @@
 use crate::errors::AppError;
 use axum::http::HeaderMap;
-use governor::{clock::DefaultClock, state::{keyed::DefaultKeyedStateStore, InMemoryState, NotKeyed}, Quota, RateLimiter};
+use governor::{
+    clock::DefaultClock,
+    state::{keyed::DefaultKeyedStateStore, InMemoryState, NotKeyed},
+    Quota, RateLimiter,
+};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
@@ -59,12 +63,22 @@ pub struct RateLimiters {
 }
 
 impl RateLimiters {
-    pub fn new(global_per_sec: u32, global_burst: u32, per_token_per_sec: u32, per_token_burst: u32) -> Self {
-        let gq = Quota::per_second(NonZeroU32::new(global_per_sec).unwrap()).allow_burst(NonZeroU32::new(global_burst).unwrap());
-        let pq = Quota::per_second(NonZeroU32::new(per_token_per_sec).unwrap()).allow_burst(NonZeroU32::new(per_token_burst).unwrap());
+    pub fn new(
+        global_per_sec: u32,
+        global_burst: u32,
+        per_token_per_sec: u32,
+        per_token_burst: u32,
+    ) -> Self {
+        let gq = Quota::per_second(NonZeroU32::new(global_per_sec).unwrap())
+            .allow_burst(NonZeroU32::new(global_burst).unwrap());
+        let pq = Quota::per_second(NonZeroU32::new(per_token_per_sec).unwrap())
+            .allow_burst(NonZeroU32::new(per_token_burst).unwrap());
         let global = RateLimiter::direct(gq);
         let per_token = RateLimiter::keyed(pq);
-        Self { global: Arc::new(global), per_token: Arc::new(per_token) }
+        Self {
+            global: Arc::new(global),
+            per_token: Arc::new(per_token),
+        }
     }
 
     pub fn check(&self, token: Option<&str>) -> Result<(), AppError> {

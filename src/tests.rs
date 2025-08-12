@@ -4,6 +4,35 @@ mod tests {
 }
 
 #[cfg(test)]
+mod integration {
+    use axum::{body::Body, http::{Request, StatusCode}};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn capabilities_ok() {
+        use crate::{config::{Auth, Config, Exec, Limits, Root, Server}, mcp::registry::ToolRegistry, server::{AppState, build_router}};
+        let cfg = Config {
+            root: Root { root_dir: std::env::temp_dir() },
+            server: Server { bind_addr: "127.0.0.1".into(), port: 0, base_path: "/mcp".into() },
+            auth: Auth { bearer_token: "t".into(), allowed_origins: vec!["https://good".into()] },
+            limits: Limits { exec_timeout_s: 2, max_stdout_kb: 8, max_request_kb: 64 },
+            exec: Exec { allowed_cmds: vec!["/bin/echo".into()], pass_env: vec![] },
+        };
+        let registry = ToolRegistry::new(&cfg).unwrap();
+        let app = build_router(AppState { cfg: std::sync::Arc::new(cfg), registry: std::sync::Arc::new(registry), rls: crate::security::RateLimiters::new(100, 100, 100, 100) });
+        let req = Request::builder()
+            .uri("/mcp/capabilities")
+            .method("GET")
+            .header("Origin", "https://good")
+            .header("Authorization", "Bearer t")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}
+
+#[cfg(test)]
 mod unit {
     use crate::security;
     use crate::tools::ensure_within_root;
@@ -68,6 +97,8 @@ mod exec_tests {
     async fn exec_truncates_large_output() {
         // Use `yes` to generate a lot of output; cap stdout small
         let cfg = test_config(vec!["/usr/bin/yes".into(), "/bin/echo".into()]);
+        // Skip test if /usr/bin/yes doesn't exist on this system
+        if !std::path::Path::new("/usr/bin/yes").exists() { return; }
         let tool = ExecTool::new(&cfg).unwrap();
         let params = json!({"cmd":"/usr/bin/yes","args":["x"],"timeout_s":1});
         let out = tool.call(params).await.unwrap();
