@@ -21,6 +21,7 @@ use std::sync::Arc;
 pub struct AppState {
     pub cfg: Arc<Config>,
     pub registry: Arc<ToolRegistry>,
+    pub rls: crate::security::RateLimiters,
 }
 
 pub type StreamBody = axum::body::Body;
@@ -29,14 +30,17 @@ pub async fn serve(cfg: Config, registry: ToolRegistry) -> anyhow::Result<()> {
     let shared = AppState {
         cfg: Arc::new(cfg),
         registry: Arc::new(registry),
+        rls: crate::security::RateLimiters::new(20, 40, 10, 20),
     };
 
     let base = shared.cfg.server.base_path.clone();
 
+    use tower_http::limit::RequestBodyLimitLayer;
+    let limit_bytes = shared.cfg.limits.max_request_kb * 1024;
     let app = Router::new()
         .route("/healthz", get(health))
         .route(&format!("{base}/capabilities"), get(capabilities))
-        .route(&format!("{base}/call"), post(call))
+        .route(&format!("{base}/call"), post(call).layer(RequestBodyLimitLayer::new(limit_bytes)))
         .with_state(shared.clone());
 
     let addr: std::net::SocketAddr =
@@ -89,6 +93,11 @@ async fn call(
         return into_response(e).into_response();
     }
     if let Err(e) = security::content_length_ok(&headers, state.cfg.limits.max_request_kb) {
+        return into_response(e).into_response();
+    }
+    // rate limit per-token and global
+    let token = security::extract_bearer(&headers);
+    if let Err(e) = state.rls.check(token.as_deref()) {
         return into_response(e).into_response();
     }
 
