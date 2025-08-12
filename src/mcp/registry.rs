@@ -23,8 +23,15 @@ impl ToolRegistry {
         Ok(Self { tools })
     }
 
-    pub fn get(&self, name: &str) -> Option<DynTool> { self.tools.iter().find(|(n, _)| n == name).map(|(_, t)| t.clone()) }
-    pub fn list_names(&self) -> Vec<String> { self.tools.iter().map(|(n, _)| n.clone()).collect() }
+    pub fn get(&self, name: &str) -> Option<DynTool> {
+        self.tools
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, t)| t.clone())
+    }
+    pub fn list_names(&self) -> Vec<String> {
+        self.tools.iter().map(|(n, _)| n.clone()).collect()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,16 +47,20 @@ pub struct CallRequest {
 #[derive(Debug, Serialize)]
 pub struct CallResponse {
     pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")] pub result: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<super::types::ErrorObj>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<super::types::ErrorObj>,
 }
 
 #[async_trait]
 pub trait Tool {
-    fn name(&self) -> &'static str;
     fn capabilities(&self) -> serde_json::Value;
     async fn call(&self, params: serde_json::Value) -> Result<serde_json::Value, AppError>;
-    async fn call_stream(&self, _params: serde_json::Value) -> Result<crate::server::StreamBody, AppError> {
+    async fn call_stream(
+        &self,
+        _params: serde_json::Value,
+    ) -> Result<crate::server::StreamBody, AppError> {
         Err(AppError::ToolError("streaming not supported".into()))
     }
 }

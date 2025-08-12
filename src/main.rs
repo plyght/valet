@@ -19,13 +19,13 @@ async fn main() -> anyhow::Result<()> {
     let mut config_path = PathBuf::from("valet.toml");
     let mut i = 1;
     while i < args.len() {
-        match args[i].as_str() {
-            "--config" => {
-                i += 1;
-                if i >= args.len() { eprintln!("--config requires a path"); std::process::exit(2); }
-                config_path = PathBuf::from(&args[i]);
+        if args[i].as_str() == "--config" {
+            i += 1;
+            if i >= args.len() {
+                eprintln!("--config requires a path");
+                std::process::exit(2);
             }
-            _ => {}
+            config_path = PathBuf::from(&args[i]);
         }
         i += 1;
     }

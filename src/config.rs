@@ -12,7 +12,9 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct Root { pub root_dir: PathBuf }
+pub struct Root {
+    pub root_dir: PathBuf,
+}
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Server {
@@ -21,7 +23,9 @@ pub struct Server {
     #[serde(default = "default_base_path")]
     pub base_path: String,
 }
-fn default_base_path() -> String { "/mcp".to_string() }
+fn default_base_path() -> String {
+    "/mcp".to_string()
+}
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Auth {
@@ -55,18 +59,26 @@ impl Config {
 
     pub fn validate(&self) -> anyhow::Result<()> {
         if !self.root.root_dir.is_dir() {
-            anyhow::bail!("root_dir does not exist or is not a directory: {}", self.root.root_dir.display());
+            anyhow::bail!(
+                "root_dir does not exist or is not a directory: {}",
+                self.root.root_dir.display()
+            );
         }
-        if self.auth.bearer_token.trim().is_empty() { anyhow::bail!("bearer_token must not be empty"); }
-        if self.auth.allowed_origins.is_empty() { anyhow::bail!("allowed_origins must not be empty"); }
-        if self.limits.exec_timeout_s == 0 { anyhow::bail!("exec_timeout_s must be > 0"); }
-        if self.limits.max_request_kb == 0 { anyhow::bail!("max_request_kb must be > 0"); }
-        if self.limits.max_stdout_kb == 0 { anyhow::bail!("max_stdout_kb must be > 0"); }
+        if self.auth.bearer_token.trim().is_empty() {
+            anyhow::bail!("bearer_token must not be empty");
+        }
+        if self.auth.allowed_origins.is_empty() {
+            anyhow::bail!("allowed_origins must not be empty");
+        }
+        if self.limits.exec_timeout_s == 0 {
+            anyhow::bail!("exec_timeout_s must be > 0");
+        }
+        if self.limits.max_request_kb == 0 {
+            anyhow::bail!("max_request_kb must be > 0");
+        }
+        if self.limits.max_stdout_kb == 0 {
+            anyhow::bail!("max_stdout_kb must be > 0");
+        }
         Ok(())
     }
-}
-
-pub fn canonical_root(root: &Path) -> anyhow::Result<PathBuf> {
-    let c = dunce::canonicalize(root)?;
-    Ok(c)
 }

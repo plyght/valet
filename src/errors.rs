@@ -6,8 +6,6 @@ use thiserror::Error;
 pub enum AppError {
     #[error("unauthorized")]
     Unauthorized,
-    #[error("forbidden")]
-    Forbidden,
     #[error("origin denied")]
     OriginDenied,
     #[error("request too large")]
@@ -36,7 +34,6 @@ impl AppError {
     pub fn code(&self) -> &'static str {
         match self {
             AppError::Unauthorized => "Unauthorized",
-            AppError::Forbidden => "Forbidden",
             AppError::OriginDenied => "OriginDenied",
             AppError::RequestTooLarge => "RequestTooLarge",
             AppError::PathOutsideRoot => "PathOutsideRoot",
@@ -51,7 +48,9 @@ impl AppError {
     pub fn status(&self) -> StatusCode {
         match self {
             AppError::Unauthorized => StatusCode::UNAUTHORIZED,
-            AppError::Forbidden | AppError::OriginDenied | AppError::PathOutsideRoot | AppError::ExecDenied => StatusCode::FORBIDDEN,
+            AppError::OriginDenied | AppError::PathOutsideRoot | AppError::ExecDenied => {
+                StatusCode::FORBIDDEN
+            }
             AppError::RequestTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             AppError::NotFound => StatusCode::NOT_FOUND,
             AppError::ExecTimeout => StatusCode::REQUEST_TIMEOUT,
@@ -61,10 +60,14 @@ impl AppError {
     }
 }
 
-pub type AppResult<T> = Result<T, AppError>;
-
 pub fn into_response(err: AppError) -> (StatusCode, Json<ErrorBody<'static>>) {
     let code = err.code();
     let message = err.to_string();
-    (err.status(), Json(ErrorBody { code, message: Box::leak(message.into_boxed_str()) }))
+    (
+        err.status(),
+        Json(ErrorBody {
+            code,
+            message: Box::leak(message.into_boxed_str()),
+        }),
+    )
 }
