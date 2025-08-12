@@ -1,0 +1,43 @@
+[package]
+name = "valet"
+version = "0.1.0"
+edition = "2021"
+authors = ["Valet Contributors"]
+license = "Apache-2.0"
+
+[dependencies]
+axum = { version = "0.7", features = ["macros", "json"] }
+hyper = { version = "1" }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_with = "3"
+toml = "0.8"
+thiserror = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json", "time"] }
+base64 = "0.22"
+bytes = "1"
+futures = "0.3"
+tokio-stream = { version = "0.1", features = ["sync"] }
+governor = { version = "0.6", default-features = false, features = ["std", "dashmap", "jitter"] }
+nonzero_ext = "0.3"
+uuid = { version = "1", features = ["v4", "serde"] }
+http = "1"
+tower = "0.5"
+tower-http = { version = "0.5", features = ["trace", "cors", "limit", "util"] }
+dunce = "1.0"
+which = "6"
+async-stream = "0.3"
+async-trait = "0.1"
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json", "stream"] }
+proptest = "1"
+tempfile = "3"
+assert_fs = "1"
+
+[features]
+# enable slower property tests
+proptests = []
