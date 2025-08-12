@@ -1,114 +1,215 @@
 # Valet — Simple Setup and Tailscale Funnel Guide
 
-This guide explains in plain English how to get Valet running on your Mac and safely share it over the internet using Tailscale Funnel.
+This guide walks you through getting Valet running on your Mac and safely sharing it using Tailscale Funnel. It includes copy‑paste commands you can run in Terminal.
 
-## What Valet does (in simple terms)
+## What Valet does (in simple words)
 
-- Valet gives an AI assistant a single, safe doorway to your Mac.
-- The AI can only do three things through that doorway:
-  1) Read a file in a specific folder you choose
-  2) Write a file in that same folder
-  3) Run a very small list of commands you approve
-- Everything is locked down with a secret token, an approved website list, size limits, time limits, and detailed logs.
+- Valet is a small gate for an AI to reach your Mac.
+- It can only:
+  1) Read files inside one folder you choose
+  2) Write files inside that same folder
+  3) Run a short approved list of commands
+- Every call must include your secret token and come from your approved website URL. Valet also enforces time and size limits and logs what happens.
 
-## What you need
+---
 
-- A Mac (macOS 13 or later is ideal)
-- Tailscale installed and logged in (Pro or Enterprise if you want Funnel)
-- A Tailscale node where you’ll run Valet (your Mac)
+## Prerequisites
 
-## Step 1 — Pick a workspace folder
+- macOS (13+ recommended)
+- Tailscale installed and logged in (Funnel feature enabled on your plan)
+- Rust toolchain (for building and running Valet)
 
-Choose a folder where Valet is allowed to read and write files. Valet will refuse to touch anything outside this folder. Example: your project folder.
+---
 
-## Step 2 — Choose the few safe commands
+## Step 1 — Choose a workspace folder
 
-Decide which commands you want to allow. Keep the list short, safe, and predictable. Good examples: `echo` or `ls`. Avoid anything that can modify the system broadly.
+Pick a folder the AI can use. Valet won’t touch files outside this folder. Example:
+
+- Workspace folder: `/Users/you/workdir`
+
+Create it if it doesn’t exist:
+
+```bash
+mkdir -p /Users/you/workdir
+```
+
+## Step 2 — Choose safe commands (keep it short)
+
+Examples that are generally safe:
+
+- `/bin/echo`
+- `/bin/ls`
+
+You’ll list them in the config next.
 
 ## Step 3 — Create a strong secret token
 
-Make up a long, unique token (a random string). You’ll give this to the AI service so it can call Valet. Never put this token in a URL; only send it as a header (Valet enforces this).
+Generate a long random token and keep it safe:
 
-## Step 4 — Tell Valet who’s allowed to call it
+```bash
+openssl rand -base64 48
+```
 
-Valet only accepts calls from websites you list. Add your public URL (the Tailscale Funnel URL you’ll create in step 7) to the allowed list. If you don’t know it yet, you can add it later and restart Valet.
+Copy the output string. You’ll paste it into the config and also give it to the AI service.
 
-## Step 5 — Create Valet’s config file
+## Step 4 — Make a Valet config file
 
-You’ll need to provide Valet with:
-- The workspace folder (root directory)
-- The list of allowed commands
-- The bearer token
-- The allowed website origins (your public URL from Funnel)
-- Limits (reasonable defaults are fine): timeouts, maximum output size, maximum request size
+Create a file named `valet.toml` (adjust paths and values to yours):
 
-Keep this file somewhere safe on your Mac and remember its path.
+```toml
+[root]
+root_dir = "/Users/you/workdir"
 
-## Step 6 — Start Valet on your Mac
+[server]
+bind_addr = "127.0.0.1"
+port = 5555
+base_path = "/mcp"
 
-- Run Valet and point it at your config file.
-- Valet listens only on your Mac (127.0.0.1). It is not exposed to the internet yet.
-- When Valet is ready, it prints one short line with the address and enabled tools.
+[auth]
+# paste the random token you generated above
+bearer_token = "PASTE-YOUR-RANDOM-TOKEN-HERE"
+# put your Tailscale Funnel URL here (you can set this after Step 7 and restart)
+allowed_origins = ["https://yourname.ts.net"]
 
-Tip: If you want Valet to run in the background after login, use the included launchd example (in `launchd/valet.plist`). Update the paths inside that file for your system before loading it.
+[limits]
+exec_timeout_s = 15
+max_stdout_kb = 512
+max_request_kb = 256
 
-## Step 7 — Publish Valet with Tailscale Funnel
+[exec]
+# absolute paths or names (names are resolved at startup)
+allowed_cmds = ["/bin/echo", "/bin/ls"]
+pass_env = ["LANG"]
+```
 
-Funnel gives you a public HTTPS URL that points at your Mac.
+Save this file somewhere you can reference, e.g. `/Users/you/valet.toml`.
 
-- Turn on Tailscale Funnel for the Mac running Valet
-- Tell Funnel to forward a public URL (like `https://<name>.ts.net/mcp`) to your local Valet address (127.0.0.1:5555 by default)
-- In your Valet config, set the allowed origin to that exact public URL from Tailscale
-- Restart Valet so it picks up the new allowed origin
+## Step 5 — Run Valet locally (no internet exposure yet)
 
-Now, your AI assistant can use that HTTPS URL to reach your Valet, with your secret token.
+From the Valet project directory:
 
-## Step 8 — Connect your AI assistant
+```bash
+# build and run
+cargo run --release -- --config /Users/you/valet.toml
+```
 
-- Give the AI assistant your public HTTPS URL (from Tailscale)
-- Give it the bearer token you chose
-- The AI must send its calls with:
-  - The `Origin` header matching your allowed origin (the Funnel URL)
-  - The `Authorization` header set to `Bearer <your-token>`
+You should see a line like:
 
-If either is missing or wrong, Valet refuses the request.
+```
+valet ready addr=127.0.0.1:5555 base_path=/mcp tools=[exec,fs_read,fs_write]
+```
 
-## How Valet protects you
+Optional: Health check locally (replace the token and origin with your values):
 
-- Only runs on your Mac; you control when it’s on
-- Only accepts calls with the correct secret token
-- Only accepts calls from the allowed website origins
-- Only reads/writes inside your chosen folder
-- Only runs commands you listed
-- Limits time and output size for commands
-- Limits request sizes
-- Logs what happens (without recording file contents)
+```bash
+TOKEN="PASTE-YOUR-RANDOM-TOKEN-HERE"
+curl -i \
+  -H "Origin: https://yourname.ts.net" \
+  -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:5555/healthz
+```
 
-## Tips for safe use
+You should get `HTTP/1.1 200 OK` and a small JSON body.
 
-- Keep the allowed commands list very short
-- Keep the token secret and rotate it occasionally
-- Use a dedicated workspace folder for the AI (not your entire home directory)
-- Review logs if something looks unusual
-- Stop Valet when you don’t need it
+---
 
-## Troubleshooting
+## Step 6 — Enable Tailscale Funnel
 
-- Getting “Unauthorized”?
-  - Check your bearer token header is present and matches
-- Getting “OriginDenied”?
-  - Make sure the `Origin` header exactly matches your Tailscale Funnel URL (including `https://`)
-- Getting “RequestTooLarge”?
-  - Your request body is bigger than the limit in your config
-- Getting “ExecDenied”?
-  - The command you requested is not on the allowed list
-- Getting “PathOutsideRoot”?
-  - The file path points outside your chosen folder (even through symlinks)
+These steps assume you’ve already logged into Tailscale on this Mac.
 
-If you need to change security settings (token, origins, limits, allowed commands), update the config file and restart Valet.
+- Map your local Valet path to a public HTTPS route (`/mcp`):
 
-## When you’re done
+```bash
+# Forward public /mcp to local 127.0.0.1:5555/mcp
+sudo tailscale serve https /mcp http://127.0.0.1:5555/mcp
+```
 
-- Stop Valet
-- Turn off Tailscale Funnel (or keep it on if you plan to use again soon)
-- Keep your config and token safe
+- Turn on Funnel on this device (you may need admin approval in Tailscale):
+
+```bash
+sudo tailscale funnel 443 on
+```
+
+- Find your public name (hostname):
+
+```bash
+TS_NAME=$(tailscale status --json | jq -r .Self.HostName)
+echo "https://$TS_NAME.ts.net/mcp"
+```
+
+- Put that exact URL (including `https://`) into `allowed_origins` in your `valet.toml`, then restart Valet.
+
+---
+
+## Step 7 — Connect your AI assistant
+
+Provide the AI with:
+
+- Your public URL: `https://<name>.ts.net/mcp`
+- Your bearer token (the one you generated)
+
+The AI must send requests with two headers:
+
+- `Origin: https://<name>.ts.net`
+- `Authorization: Bearer <your-token>`
+
+If either is missing or wrong, Valet rejects the call.
+
+---
+
+## Step 8 — Optional: keep Valet running in the background
+
+Use the included launchd example. Edit it first to point to your binary and config paths:
+
+- File: `launchd/valet.plist`
+
+Then load it (example paths; adjust as needed):
+
+```bash
+# Copy the plist where launchd expects it
+cp launchd/valet.plist ~/Library/LaunchAgents/com.valet.service.plist
+
+# Edit the copied file to set the correct paths to your valet binary and config
+open -e ~/Library/LaunchAgents/com.valet.service.plist
+
+# Load and start
+launchctl load ~/Library/LaunchAgents/com.valet.service.plist
+launchctl start com.valet.service
+
+# View logs (based on the paths you set in the plist)
+tail -f /usr/local/var/log/valet.out.log
+```
+
+---
+
+## Troubleshooting quick checks
+
+- Unauthorized
+  - Ensure `Authorization: Bearer <token>` is present and matches your config
+- OriginDenied
+  - Ensure `Origin` matches exactly your `https://<name>.ts.net` (no typos)
+- RequestTooLarge
+  - Your request body exceeded `max_request_kb`
+- ExecDenied
+  - The command you requested isn’t in `allowed_cmds`
+- PathOutsideRoot
+  - The path tries to leave your workspace folder (even through symlinks)
+
+---
+
+## Safety tips
+
+- Keep `allowed_cmds` extremely small
+- Rotate your token occasionally (generate a new one with `openssl rand -base64 48`)
+- Use a dedicated workspace folder, not your whole home folder
+- Review logs if anything looks odd
+- Stop Valet when you’re not using it
+
+---
+
+## Recap
+
+- Run Valet locally with your config
+- Use Tailscale to publish `/mcp` at a public HTTPS URL
+- Give the AI your public URL and the token
+- Valet will only do what you explicitly allow, inside your chosen folder
