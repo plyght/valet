@@ -1,15 +1,15 @@
-# Valet — Simple Setup and Tailscale Funnel Guide
+# Valet — MCP Server Setup and Tailscale Funnel Guide
 
-This guide walks you through getting Valet running on your Mac and safely sharing it using Tailscale Funnel. It includes copy‑paste commands you can run in Terminal.
+This guide walks you through getting Valet running on your Mac as an MCP (Model Context Protocol) server and safely sharing it using Tailscale Funnel. It includes copy‑paste commands you can run in Terminal.
 
 ## What Valet does (in simple words)
 
-- Valet is a small gate for an AI to reach your Mac.
-- It can only:
-  1) Read files inside one folder you choose
-  2) Write files inside that same folder
-  3) Run a short approved list of commands
-- Every call must include your secret token and come from your approved website URL. Valet also enforces time and size limits and logs what happens.
+- Valet is an MCP server that lets AI assistants safely interact with your Mac
+- It implements JSON-RPC 2.0 over HTTP and provides three tools:
+  1) Read files inside one folder you choose (`fs_read`)
+  2) Write files inside that same folder (`fs_write`) 
+  3) Run a short approved list of commands (`exec`)
+- Every call must include your secret token in the URL path and come from your approved website URL. Valet also enforces time and size limits and logs what happens.
 
 ---
 
@@ -99,65 +99,88 @@ You should see a line like:
 valet ready addr=127.0.0.1:5555 base_path=/mcp tools=[exec,fs_read,fs_write]
 ```
 
-Optional: Health check locally (replace the token and origin with your values):
+Optional: Test the MCP server locally (replace values with yours):
 
 ```bash
-TOKEN="PASTE-YOUR-RANDOM-TOKEN-HERE"
+# Health check (no token required)
 curl -i \
   -H "Origin: https://yourname.ts.net" \
-  -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:5555/healthz
+
+# List available MCP tools
+curl -i \
+  -H "Origin: https://yourname.ts.net" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' \
+  "http://127.0.0.1:5555/mcp/PASTE-YOUR-TOKEN-HERE"
+
+# Test exec tool
+curl -i \
+  -H "Origin: https://yourname.ts.net" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"exec","arguments":{"cmd":"echo","args":["Hello MCP"]}},"id":2}' \
+  "http://127.0.0.1:5555/mcp/PASTE-YOUR-TOKEN-HERE"
 ```
 
-You should get `HTTP/1.1 200 OK` and a small JSON body.
+You should get `HTTP/1.1 200 OK` responses with JSON-RPC results.
 
 ---
 
 ## Step 6 — Enable Tailscale Funnel
 
-These steps assume you’ve already logged into Tailscale on this Mac.
+These steps assume you've already logged into Tailscale on this Mac.
 
-- Decide your token and include it in the URL path. Example token (generate yours):
-
+**Important:** Use the full path to Tailscale if the command isn't in your PATH:
 ```bash
-TOKEN=$(openssl rand -base64 48)
+/Applications/Tailscale.app/Contents/MacOS/Tailscale
 ```
 
-- Map your local Valet path to a public HTTPS route that includes the token:
+1. **Route the entire /mcp path to your local server:**
 
 ```bash
-# Forward public /mcp/$TOKEN to local 127.0.0.1:5555/mcp/$TOKEN
-sudo tailscale serve https "/mcp/$TOKEN" "http://127.0.0.1:5555/mcp/$TOKEN"
+# This routes all /mcp requests to your local Valet server
+sudo tailscale funnel --bg --set-path /mcp http://127.0.0.1:5555/mcp
 ```
 
-- Turn on Funnel on this device (you may need admin approval in Tailscale):
-
-```bash
-sudo tailscale funnel 443 on
-```
-
-- Find your public name (hostname):
+2. **Find your public hostname:**
 
 ```bash
 TS_NAME=$(tailscale status --json | jq -r .Self.HostName)
-echo "https://$TS_NAME.ts.net/mcp"
+echo "Your public MCP URL will be: https://$TS_NAME.ts.net/mcp/YOUR-TOKEN-HERE"
 ```
 
-- Put that exact URL’s origin (including `https://`) into `allowed_origins` in your `valet.toml`, then restart Valet. Your public paths will look like `https://<name>.ts.net/mcp/<TOKEN>/...`, and they must include the same token string that’s in your config.
+3. **Update your config and restart Valet:**
+
+Put the Tailscale origin (just the `https://hostname.ts.net` part) into `allowed_origins` in your `valet.toml`:
+
+```toml
+allowed_origins = ["https://your-hostname.ts.net"]
+```
+
+Then restart Valet.
 
 ---
 
 ## Step 7 — Connect your AI assistant
 
-Provide the AI with:
+Provide your AI assistant (like Cobot) with:
 
-- Your public URL: `https://<name>.ts.net/mcp/<TOKEN>` (include your token in the path)
+**URL:** `https://<name>.ts.net/mcp/<YOUR-TOKEN>`
 
-The AI must send requests with:
+**The AI must send:**
+- `Origin: https://<name>.ts.net` header
+- Standard MCP JSON-RPC 2.0 requests to the URL
 
-- `Origin: https://<name>.ts.net`
+**Example working request:**
+```bash
+curl -i \
+  -H "Origin: https://your-hostname.ts.net" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' \
+  "https://your-hostname.ts.net/mcp/YOUR-TOKEN-HERE"
+```
 
-If the token in the URL path doesn’t match your Valet config, Valet rejects the call.
+If the token in the URL path doesn't match your Valet config, Valet rejects the call.
 
 ---
 
@@ -188,16 +211,34 @@ tail -f /usr/local/var/log/valet.out.log
 
 ## Troubleshooting quick checks
 
-- Unauthorized
-  - Ensure `Authorization: Bearer <token>` is present and matches your config
-- OriginDenied
-  - Ensure `Origin` matches exactly your `https://<name>.ts.net` (no typos)
-- RequestTooLarge
+- **HTTP 401 Unauthorized**
+  - Token in URL path doesn't match your config's `bearer_token`
+  - Check that the URL includes the exact token: `/mcp/YOUR-TOKEN-HERE`
+- **OriginDenied** 
+  - Ensure `Origin` header matches exactly your `https://<name>.ts.net` (no typos)
+  - Check `allowed_origins` in your config
+- **HTTP 404 Not Found**
+  - Tailscale Funnel routing issue
+  - Valet server not running
+  - Wrong URL format (should be `/mcp/TOKEN` not `/mcp/TOKEN/anything`)
+- **RequestTooLarge**
   - Your request body exceeded `max_request_kb`
-- ExecDenied
-  - The command you requested isn’t in `allowed_cmds`
-- PathOutsideRoot
+- **ExecDenied** 
+  - The command you requested isn't in `allowed_cmds`
+- **PathOutsideRoot**
   - The path tries to leave your workspace folder (even through symlinks)
+
+**Debug commands:**
+```bash
+# Check if Valet is running locally
+curl -i -H "Origin: https://your-hostname.ts.net" http://127.0.0.1:5555/healthz
+
+# Check Tailscale Funnel status
+tailscale funnel status
+
+# Check Tailscale status
+tailscale status
+```
 
 ---
 
@@ -213,7 +254,8 @@ tail -f /usr/local/var/log/valet.out.log
 
 ## Recap
 
-- Run Valet locally with your config
-- Use Tailscale to publish `/mcp` at a public HTTPS URL
-- Give the AI your public URL and the token
+- Run Valet locally as an MCP server with your config
+- Use Tailscale Funnel to publish `/mcp` at a public HTTPS URL
+- Give your AI assistant the public URL: `https://hostname.ts.net/mcp/YOUR-TOKEN`
+- The AI sends MCP JSON-RPC 2.0 requests to interact with your Mac safely
 - Valet will only do what you explicitly allow, inside your chosen folder

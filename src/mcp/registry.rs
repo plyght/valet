@@ -1,6 +1,5 @@
 use crate::{config::Config, errors::AppError};
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub type DynTool = Arc<dyn Tool + Send + Sync + 'static>;
@@ -32,25 +31,6 @@ impl ToolRegistry {
     pub fn list_names(&self) -> Vec<String> {
         self.tools.iter().map(|(n, _)| n.clone()).collect()
     }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CallRequest {
-    pub id: String,
-    pub tool: String,
-    #[serde(default)]
-    pub params: serde_json::Value,
-    #[serde(default)]
-    pub stream: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CallResponse {
-    pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<super::types::ErrorObj>,
 }
 
 #[async_trait]
