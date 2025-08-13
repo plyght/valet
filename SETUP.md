@@ -117,11 +117,17 @@ You should get `HTTP/1.1 200 OK` and a small JSON body.
 
 These steps assume you’ve already logged into Tailscale on this Mac.
 
-- Map your local Valet path to a public HTTPS route (`/mcp`):
+- Decide your token and include it in the URL path. Example token (generate yours):
 
 ```bash
-# Forward public /mcp to local 127.0.0.1:5555/mcp
-sudo tailscale serve https /mcp http://127.0.0.1:5555/mcp
+TOKEN=$(openssl rand -base64 48)
+```
+
+- Map your local Valet path to a public HTTPS route that includes the token:
+
+```bash
+# Forward public /mcp/$TOKEN to local 127.0.0.1:5555/mcp/$TOKEN
+sudo tailscale serve https "/mcp/$TOKEN" "http://127.0.0.1:5555/mcp/$TOKEN"
 ```
 
 - Turn on Funnel on this device (you may need admin approval in Tailscale):
@@ -137,7 +143,7 @@ TS_NAME=$(tailscale status --json | jq -r .Self.HostName)
 echo "https://$TS_NAME.ts.net/mcp"
 ```
 
-- Put that exact URL (including `https://`) into `allowed_origins` in your `valet.toml`, then restart Valet.
+- Put that exact URL’s origin (including `https://`) into `allowed_origins` in your `valet.toml`, then restart Valet. Your public paths will look like `https://<name>.ts.net/mcp/<TOKEN>/...`, and they must include the same token string that’s in your config.
 
 ---
 
@@ -145,15 +151,13 @@ echo "https://$TS_NAME.ts.net/mcp"
 
 Provide the AI with:
 
-- Your public URL: `https://<name>.ts.net/mcp`
-- Your bearer token (the one you generated)
+- Your public URL: `https://<name>.ts.net/mcp/<TOKEN>` (include your token in the path)
 
-The AI must send requests with two headers:
+The AI must send requests with:
 
 - `Origin: https://<name>.ts.net`
-- `Authorization: Bearer <your-token>`
 
-If either is missing or wrong, Valet rejects the call.
+If the token in the URL path doesn’t match your Valet config, Valet rejects the call.
 
 ---
 

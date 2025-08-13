@@ -8,6 +8,7 @@ use governor::{
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub fn require_bearer(headers: &HeaderMap, expected: &str) -> Result<(), AppError> {
     let auth = headers
         .get(axum::http::header::AUTHORIZATION)

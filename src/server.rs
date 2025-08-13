@@ -8,7 +8,7 @@ use crate::{
     security,
 };
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -50,23 +50,23 @@ pub fn build_router(shared: AppState) -> Router {
     let limit_bytes = shared.cfg.limits.max_request_kb * 1024;
     Router::new()
         .route("/healthz", get(health))
-        .route(&format!("{base}/capabilities"), get(capabilities))
+        .route(&format!("{base}/:token/capabilities"), get(capabilities))
         .route(
-            &format!("{base}/call"),
+            &format!("{base}/:token/call"),
             post(call).layer(RequestBodyLimitLayer::new(limit_bytes)),
         )
         .with_state(shared)
 }
 
 async fn health(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    match authorize(&state, &headers) {
-        Ok(()) => (StatusCode::OK, Json(json!({"status":"ok"}))).into_response(),
-        Err(e) => into_response(e).into_response(),
-    }
+    // For health, still require origin, but no token in path; accept if origin is valid
+    security::check_origin(&headers, &state.cfg.auth.allowed_origins)
+        .map(|_| (StatusCode::OK, Json(json!({"status":"ok"}))).into_response())
+        .unwrap_or_else(|e| into_response(e).into_response())
 }
 
-async fn capabilities(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if let Err(e) = authorize(&state, &headers) {
+async fn capabilities(Path(path_token): Path<String>, State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Err(e) = authorize_path(&state, &headers, &path_token) {
         return into_response(e).into_response();
     }
     let tools: Vec<ToolInfo> = state
@@ -91,6 +91,7 @@ async fn capabilities(State(state): State<AppState>, headers: HeaderMap) -> Resp
 }
 
 async fn call(
+    Path(path_token): Path<String>,
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<CallRequest>,
@@ -109,7 +110,7 @@ async fn call(
         .map(|v| v.starts_with("Bearer "))
         .unwrap_or(false);
 
-    if let Err(e) = authorize(&state, &headers) {
+    if let Err(e) = authorize_path(&state, &headers, &path_token) {
         audit_end(
             &request_id,
             &origin,
@@ -349,8 +350,9 @@ fn audit_end_exec(
     );
 }
 
-fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), AppError> {
-    security::require_bearer(headers, &state.cfg.auth.bearer_token)?;
+fn authorize_path(state: &AppState, headers: &HeaderMap, path_token: &str) -> Result<(), AppError> {
+    // New auth: token must match path segment, and Origin must be allowed
+    if path_token != state.cfg.auth.bearer_token { return Err(AppError::Unauthorized); }
     security::check_origin(headers, &state.cfg.auth.allowed_origins)?;
     Ok(())
 }

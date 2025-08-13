@@ -21,10 +21,9 @@ mod integration {
         let registry = ToolRegistry::new(&cfg).unwrap();
         let app = build_router(AppState { cfg: std::sync::Arc::new(cfg), registry: std::sync::Arc::new(registry), rls: crate::security::RateLimiters::new(100, 100, 100, 100) });
         let req = Request::builder()
-            .uri("/mcp/capabilities")
+            .uri("/mcp/t/capabilities")
             .method("GET")
             .header("Origin", "https://good")
-            .header("Authorization", "Bearer t")
             .body(Body::empty())
             .unwrap();
         let resp = app.clone().oneshot(req).await.unwrap();

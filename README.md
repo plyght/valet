@@ -58,11 +58,11 @@ valet ready addr=127.0.0.1:5555 base_path=/mcp tools=[fs_read,fs_write,exec]
 
 ## HTTP API (MCP over HTTP)
 
-- `GET /mcp/capabilities` — capability discovery (tools and streaming support)
-- `POST /mcp/call` — invoke a tool; set `stream=true` to receive NDJSON events
-- `GET /healthz` — shallow health (still requires auth and valid Origin)
+- `GET /mcp/<token>/capabilities` — capability discovery (tools and streaming support)
+- `POST /mcp/<token>/call` — invoke a tool; set `stream=true` to receive NDJSON events
+- `GET /healthz` — shallow health (requires Origin only)
 
-All endpoints require `Authorization: Bearer <token>` and a valid `Origin` header.
+All endpoints require a valid `Origin` header and a token embedded in the URL path. Example: `/mcp/<token>/call` and `/mcp/<token>/capabilities`. Generate a token with `openssl rand -base64 48` and set it in your config; the URL path must include the same token to work.
 
 ### Streaming format (NDJSON)
 
